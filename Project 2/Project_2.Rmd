@@ -1,0 +1,134 @@
+---
+title: "S670 Project 2"
+author: 
+- The Fantastic Four
+- Erik "Human Torch" Parker
+- Emily "Invisible Woman" Rudman
+- Vinay "The Thing" Vernekar
+- Jervis "Mister Fantastic" Wang
+date: "February 12, 2017"
+output: pdf_document
+---
+
+
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+
+unemployment <- read.csv("./UNRATENSA.csv", head = TRUE)
+
+library(ggplot2)
+library(broom)
+library(tidyr)
+library(gridExtra)
+
+unemployment$NewDate <- seq(1948.000, 2017.000, length = 829)
+
+ggplot(unemployment, aes(x = NewDate, y = UNRATENSA)) + geom_point() + geom_line() + geom_smooth() + labs(title = "Unadjusted US unemployment rate")
+
+
+unemployment.lo <- loess(UNRATENSA ~ NewDate, degree = 2, data = unemployment)
+
+unemployment.lo.df <- augment(unemployment.lo)
+
+#ggplot(unemployment.lo.df, aes(x= NewDate, y = .resid)) +geom_smooth(span = .25) + geom_line()
+
+unemployment.lo2 <- loess(.resid~NewDate, span = 0.25, data = unemployment.lo.df)
+unemployment.lo2.df <- augment(unemployment.lo2)
+names(unemployment.lo2.df) = c(".resid", "NewDate", ".fitted", ".se.fit", ".resid2")
+
+#ggplot(unemployment.lo2.df, aes(x = NewDate, y = .resid2)) + geom_point() + geom_line()
+
+#ggplot(unemployment.lo2.df, aes(sample = .resid2)) + stat_qq()  
+
+Year <- unemployment$NewDate
+Trend <- unemployment.lo.df$.fitted - mean(unemployment.lo.df$.fitted)
+Oscillatory <- unemployment.lo2.df$.fitted
+Residuals <- unemployment.lo2.df$.resid2
+unemployment.ts <- data.frame(Year, Trend, Oscillatory, Residuals)
+
+unemployment.ts.long <- unemployment.ts%>% gather(type, UNDATANSA, Trend: Residuals)
+unemployment.ts.long$type <- factor (unemployment.ts.long$type, levels = c("Trend", "Oscillatory", "Residuals"))
+#ggplot(unemployment.ts.long, aes(x=Year, y = UNDATANSA))+geom_line()+facet_grid(~type)
+
+#var(Trend)
+#var(Oscillatory)
+#var(Residuals)
+# Residuals explain the most here, possibly seasonal as that hasn't been pulled out yet.
+
+seasonal <- ts(unemployment$UNRATENSA, frequency = 12)
+
+unemployment.stl <- stl(seasonal, s.window = 15, s.degree = 0)
+
+year.cut <- cut_number(time(unemployment$NewDate), n=5)
+unemployment2 <- data.frame(year=unemployment$NewDate, unemployment.stl$time.series, year.cut)
+#ggplot(unemployment2, aes(x=year, y=seasonal)) + geom_line() + facet_wrap(~year.cut, ncol=1, scales="free_x")
+
+monthplot(unemployment.stl, choice="seasonal")
+# So, unemployment is highest after the holidays end (Jan-March), seems to be a definite seasonal component.
+
+#ggplot(unemployment2, aes(x= Year, y = Trend+remainder)) + geom_line() + geom_smooth()
+
+# Seems to show that when seasonal info is removed, there is not really any clear trend, just residual noise left over.
+
+#unemployment.month <- data.frame(unemployment2, month = factor(1:12)) # Can't get to work for above plot like Brad does, necessary though?
+
+seasonal.alone <- unemployment2$seasonal
+
+#var(seasonal.alone)
+# Super low
+
+#var(Residuals - seasonal.alone)
+# Still the highest
+
+unemployment.s.ts <- data.frame(Year, Oscillatory, Trend, Residuals, seasonal.alone)
+
+unemployment.s.ts.long <- unemployment.s.ts %>% gather(type, UNDATANSA, seasonal.alone:Residuals:Oscillatory)
+
+ggplot(unemployment.s.ts.long, aes(x = Year, y = UNDATANSA)) + geom_line() + facet_wrap(~type, ncol = 1)
+# Of all the components, it seems like the oscillatory component explains the greatest amount of the variation seen in the original plot from above. Seem to be at least 6 cycles in unemployment over the years, seemingly pretty irregular. Trend explains some of the variance, but there doesn't seem to be much of an actual pattern to it, slow increase until 1980 then a slight decrease until 2000 and a slight increase again after that. Seasonal variation regularly explains a decent amount of the variation, so seasonality deffinitely has an impact on unemployment, but it isn't huge, and interestingly it seems to be decreasing with time.
+
+```
+
+### Trend: ###
+
+> The overall trend when plotted is quite noisy, but going by the loess fit there does seem to show a general increase in unemployment from 1948 to about 1981, followed by a decrease until around 2000, and then another slight increase until the end of the timeframe in 2017. This trend is by no means perfect, and really doesn't seem like the best judge of what is really going on due to all the noise and oscillations in the plot. This conclusion is backed up by the fact that when we partition the variation of the time series, the trend component explains the second least amount of the variation seen (0.641) - behind the Oscillatory and residual components, and just ahead of the seasonal component.
+
+### Oscillations / Cycles: ###
+
+> Thogh they don't show any clear pattern, the oscillatory/cycle portion of the time series does seem to explain a good amount of the variation seen over time - the most in fact (behind the residuals) at 0.645. Though, as stated previously, there is no real discernable pattern to the oscillations seen, there does seem to be at least 6 cycles of increasing or decreasing unemployment rates over the years included in this dataset.
+
+### Seasonal: ###
+
+> Despite it's relative consistency, and interesting pattern of the highest unemployment in the summer (teachers?), and in January through March after the holidays (seasonal positions?) - the seasonal component of this dataset never really accounts for much of the variation seen over time. The amount of variation explained by the seasonal component alone is quite low, 0.172, likely due to its regular cyclying nature and the most it ever explains in one month is far lower than the oscillatory and trend components.
+> Interestingly though, the amount of variation explained by the seasonal component actually decreases over time, and the yearly pattern described above changes as time progresses as well. Perhaps this pattern change over time is due to the fact that the overall impact of this factor is decreasing along with it - fewer people have their work status impacted by seasonality and so any change they experience will have a greater proportional impact on the pattern of this component?
+
+
+
+
+```{r, echo=FALSE}
+
+housing <- read.csv("./HOUST.csv", head = TRUE)
+
+housing$NewDate <- seq(1959.000, 2017.000, length = 697)
+
+unemployment.post1959 <- unemployment[133:829,]
+
+housing.plot <- ggplot(housing, aes(x = NewDate, y = HOUST)) + geom_line() +labs(title = "Number of new homes beginning construction per month", x = "Date", y = "Housing starts (thousands)")
+unemployment.plot <- ggplot(unemployment.post1959, aes(x = NewDate, y = UNRATENSA)) + geom_line()  + labs(title = "Unadjusted monthly US unemployment rate", x= "Date", y = "Unemployment rate")
+
+grid.arrange(housing.plot, unemployment.plot)
+
+```
+
+### Housing starts vs Unemployment rate###
+
+> The number of new privately owned housing units started (HOUST) seems to have an inverse predictive relationship with the unemployment rate. This relationship seems strongest after 1980. In November of 1981, HOUST was at a local minimum (837,000 units). Right after November of 1981, the unemployment rate started to rapidly increase reaching a local maximum (11.4%) in January of 1983. In February of 1984 the housing starts hit a local maximum(2,260,000 units). After this time the unemployment rate decreased, reaching a local minimum (5%) in December of 1988.
+
+> After the end of 1987, HOUST decreased until January of 1991 where it hit a local minimum (798,000 units) and then slowly increased until the end of 1998 where it reached a local maximum (1,792,000 units). In the middle of 1989 the unemployment rate increased until March of 1992  (7.8%) and then slowly decreased until November of 2000 (3.7%).
+
+> In 1999 HOUST decreased a little bit until July of 2000 when it reached a local minimum(1,463,000 units) and then increased until January of 2006 (2,273,000 units).  After November of 2000, the unemployment rate increased until January of 2003 (6.5%) and then decreased until October 2006 (4.1%).
+
+> After January of 2006, HOUST plummeted until April 2009 (478,000 units) and has slowly increased ever since. After October of 2006 the unemployment rate started to skyrocket until January 2010 (10.6%) and has slowly decreased ever since.
+
+> In conclusion, the number of new privately owned housing units started seems to have a definite inverse predictive relationship with the unemployment rate.  Large changes to HOUST generally preceed large changes in unemployment rate by a few months to a little over a year.
+

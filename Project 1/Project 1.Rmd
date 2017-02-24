@@ -1,0 +1,124 @@
+---
+title: "S670 Project 1"
+author: 
+- The Fantastic Four
+- Erik "Human Torch" Parker
+- Emily "Invisible Woman" Rudman
+- Vinay "The Thing" Vernekar
+- Jervis "Mister Fantastic" Wang
+date: "January 22, 2017"
+output: pdf_document
+---
+
+# 1. Is there a meaningful difference between the distribution of damage caused by hurricanes with female names and the distribution of damage caused by hurricanes with male names?
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+
+raw.data <- read.csv("/media/removable/USB Drive/S670/Project 1/pnas.1402786111.sd01 - Archival Study.csv", header = TRUE)[1:92,]
+library(ggplot2)
+library(gridExtra)
+library(tidyr)
+library(lattice)
+library(dplyr)
+raw.data$Gender_MF <- as.factor(raw.data$Gender_MF)
+NDAM.log <- log10(raw.data$NDAM)
+
+#ggplot(raw.data, aes(sample = NDAM)) + stat_qq() + facet_wrap(~Gender_MF)
+# Code for the normal QQ plots of the untransformed and log10 transformed data.
+
+all.years.plot <- ggplot(raw.data, aes(x = Gender_MF, y = NDAM.log)) + geom_boxplot() + ggtitle("Log10 NDAM Plot of all Years") + labs(x = "Gender: 0 for male, 1 for female", y = "Log10 NDAM")
+# Log10 transformed NDAM plot for all years
+
+post.1979.data <- raw.data[39:92,]
+
+post.1979.plot <- ggplot(post.1979.data, aes(x = as.factor(post.1979.data$Gender_MF), y = log10(post.1979.data$NDAM))) + geom_boxplot() + ggtitle("Log10 NDAM Plot of Years after 1979") + labs(x = "Gender: 0 for male, 1 for female", y = expression("Log10 NDAM"))
+# Log10 transformed NDAM plot for years after 1979
+
+myvar<-c("Year","MasFem","MinPressure_before","Minpressure_Updated.2014","Gender_MF","Category","alldeaths","NDAM","ZMinPressure_A")
+
+hdata = read.csv("pnas.1402786111.sd01 - Archival Study.csv")[1:92,]
+hudata=hdata[myvar]
+
+nn=data.frame(Year=hudata$Year,Gender=hudata$Gender_MF,NDAM=hudata$NDAM)
+
+P2 <-ggplot(nn,aes(x=Year))+geom_bar() + facet_grid(~Gender) + theme(axis.text.x = element_text(angle = 90, hjust = 1)) +scale_x_discrete(breaks =c(1950, 1979, 2012))+ ggtitle("Year and gender wise occurrance") 
+
+grid.arrange(all.years.plot, post.1979.plot, ncol = 2)
+P2
+
+
+```
+
+
+Normality:
+
+> The faceted normality plot of the Gender_MF verses NDAM showed that the distribution was not normal. When the NDAM data was transformed by log_10 the distribution looked significantly more normal. Therefore, the remainder of the graphs will only use the log transform of the NDAM data.
+
+Boxplot with all years:
+
+> The first boxplot included shows the difference in distribution in the log transform of the NDAM data for hurricanes categorized with masculine names (0) and hurricanes categorized with feminine names (1). The hurricanes categorized with masculine names (0) had a larger spread and a slightly higher median than the hurricanes categorized with feminine names (1)).  
+
+Years:
+
+> However, this may not be the best representation of the difference in distribution because there were significantly more hurricanes with feminine names before 1979 than hurricanes with masculine names.
+
+Boxplot from 1979 on:
+
+> This boxplot shows the difference in distribution in the log transform of the NDAM data for hurricanes after 1979 categorized with masculine names (0) and hurricanes categorized with feminine names (1). This distribution looks very similar to the results when we looked at all the years.
+
+Question 1 conclusion:
+
+> From these analyses we can conclude that there is no real meaningful difference between the distribution of damage caused by male and female named hurricanes in this dataset.
+
+
+
+# 2. Are there any meaningful differences between hurricanes with female names and hurricanes with male names?
+
+
+```{r, echo=FALSE}
+
+#plot(hudata$Category,hudata$MinPressure_before)
+#plot(hudata$Category,hudata$alldeaths)
+
+damage=select(hudata,Gender_MF,alldeaths,Category,NDAM)
+
+report<-damage%>%group_by(Category,Gender_MF)%>%summarise(fr=length(Category),td=sum(alldeaths),avgdt=td/fr,tnad=sum(NDAM),avgndam=tnad/fr)
+
+report<-damage%>%group_by(Category,Gender_MF)%>%summarise(fr=length(Category),td=sum(alldeaths),tnad=sum(NDAM))
+
+report$avgndam<-report$tnad/report$fr
+report$avgdt<-report$td/report$fr
+
+
+
+p1=ggplot(report, aes(x=Category,y=avgdt)) + geom_bar(stat="identity")+facet_grid(~Gender_MF)+ggtitle("Avg death category wise")
+p2=ggplot(report, aes(x=Category,y=avgndam)) + geom_bar(stat="identity")+facet_grid(~Gender_MF)+ggtitle("Avg NDAM category wise")
+grid.arrange(p1, p2, ncol=2)
+
+
+```
+
+> In general, the above plots show that there are no real differences between male and female hurricanes of category 1 through 4.  However, there is an interesting, non-significant, difference between the two category 5 stroms, Andrew (male) and Camille (female).  Wile Andrew had a low death count of 62 and a high NDAM of 66730, Camille had a high death count of 256 and a relatively low NDAM of 23040.
+
+> From outside research, we found that in 1969 hurricane Camille hit the Missippi river, due to the impact it caused extreme flooding which resulted in increased damage to property and life. The hurricane affected Louisiana, Mississippi, Alabama, Florida, Ohio and Virginia resulting in highest death numbers for a hurricance in this dataset.  Andrew hit in South Florida and also cuased major damage in the Bahamas and Louisiana. It also caused damage to many oil rigs. Andrew spawned at least 28 tornadoes along the Gulf Coast, especially in Alabama, Georgia and Mississippi causing high NDAM.
+
+
+```{r, echo=FALSE}
+
+P1=ggplot(hudata,aes(y=log10(NDAM),x=as.factor(Gender_MF)))+geom_boxplot()
+P1=P1+stat_summary(fun.y=mean, colour="firebrick4", geom="point")
+
+P1+facet_grid(~Category)+ggtitle("Category wise NDAM")+labs(x="Gender: 0 for male, 1 for female", y="Log10 NDAM")
+
+
+```
+
+> From this plot, it is clear that no real conclusions can be drawn from the category 5 storms as there are only two storms of this category in the dataset; one of which is masculine and the other feminine.  The only meaningful difference we can draw from this plot is that the average (red dot) NDAM score for the female hurricanes is slightly higher than the average for the males in all categories, with the exception of category 2.
+
+> Despite this, there appears to be no significant difference between the normalized damage caused between male and female hurricanes in this dataset.  
+
+> We have also noticed that in 1985, there were 6 hurricane contacts, this was due to the La Niña effect, and similarly in 2004 there were also 6 hurricane contacts due to El Niño.
+
+> From all of our analysis, the most meaningful difference between male and female hurricanes seems to be the large discrepancy the number of female and male names assigned to hurricanes over the 62 years of data analyzed.  As can be clearly seen in our "Year and gender wise occurance" plot above, this discrepancy is due to the complete lack of an assignment of male names to hurricanes from 1956 until 1979.  During this 23 year stretch, 26 hurricanes occured - all of them female.  This major gap lead to a large imbalance between the overall number of male and female hurricanes, possibly skewing any analysis of this dataset if this difference is not accounted for.
+
+> Overall this analysis has lead us to conclude that some other factor, aside from male or female names, is most important here when analyzing hurricane impacts.  It is the belief of "The Fantastic Four" that other factors such as hurricane location, level of local preparedness, and population density are much more useful factors than name gender in understanding resulting damage.

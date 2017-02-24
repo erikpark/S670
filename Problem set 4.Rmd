@@ -1,0 +1,87 @@
+---
+title: "Problem set 4"
+author: "Erik Parker"
+date: "February 14, 2017"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, echo=FALSE}
+pew.data <- read.csv("./Pew.data.final.HW4.csv", head = TRUE)
+
+library(ggplot2)
+library(GGally)
+
+birthplace <- pew.data[1:14,]
+birthplace.score <- birthplace$Standardized.score
+language <- pew.data[15:28,]
+language.score <- language$Standardized.score
+religion <- pew.data[29:42,]
+religion.score <- religion$Standardized.score
+customs <- pew.data[43:56,]
+customs.score <- customs$Standardized.score
+country <- customs$Country
+
+score.by.country <- cbind(birthplace, birthplace.score, language.score, religion.score, customs.score)
+score.by.country <- score.by.country[,-(2:3)]
+```
+
+
+
+### 1. Univariate analysis. Find the total score for each country (adding up the standardized scores for all four questions) and 
+#display the results in a table or graph. ###
+
+```{r, echo=FALSE}
+total.scores <- rowSums(score.by.country[,-1])
+score.by.country <- cbind(score.by.country, total.scores)
+final.score.by.country <- score.by.country[,c(1,6)]
+final.score.by.country
+
+ggplot(score.by.country, aes(x = country, y = total.scores)) + theme(axis.text.x = element_text(angle=45, vjust = 0.5)) + geom_boxplot() + scale_size(range = c(3,10)) + labs(title = "Total standardized score by country", y = "Total scores", x = "Country")
+
+
+```
+
+
+
+### 2. Bivariate analysis. Use ggpairs() in the GGally library to create a scatterplot matrix. There should be 4-choose-2 = 6 pairs of variables plotted. Identify which of these six pairs are strongly related, and which are weakly related. ###
+
+```{r, echo=FALSE}
+ggpairs(score.by.country, columns = c("birthplace.score", "language.score", "religion.score", "customs.score"))
+```
+
+
+> From the pairwise correlation values shown in the plot above, it is clear that religion and birthplace are the most strongly related national identity variables across all countries, with birthplace and customs falling into a close second, and religion and customs in third. Conversely, language and customs, language and birthplace, and language and religion are quite weakly related. Meaning that in general: customs, religion, and birthplace are all closely correlated with one another.
+
+> Interstingly (given American religious right political talking points), language doesn't seem to be strongly related to any of the other metrics of national identity (vocal minorities strike again?).
+
+
+
+### 3. Trivariate analysis. You should find that three of the variables are quite strongly related, while the other variable is more weakly related. Draw a scatterplot of the two most strongly correlated variables. Then color the points according to the weakly related variable (e.g. make the points where the weakly related variable is above average one color, and the weakly related variable is below average another color.)  What does this tell you that was not obvious from the bivariate analysis? ###
+
+
+```{r, echo=FALSE}
+
+
+avg.language <- mean(score.by.country$language.score)
+
+
+language.avg <- rep(NA, nrow(score.by.country))
+language.avg[score.by.country$language.score>avg.language] = "Above average language score"
+language.avg[score.by.country$language.score<avg.language] = "Below average language score"
+final.question <- data.frame(score.by.country, language.avg)
+ggpairs(final.question, columns = c("religion.score", "birthplace.score"), aes(colour = language.avg))
+
+
+```
+
+
+> This plot seems to be saying that the high correlation between birthplace and religion is complicated by the fact that respondants in countries which placed a higher than average importance on language show a much higher overall correlation between birthplace and religion than did respondants who placed a lower than average importance on language. That is, the overall correlation between religion and birthplace for all countries of 0.806 would be quite a bit higher (0.895) if we only focused our analysis countries that place a higher emphasis on the importance of language, or lower (0.757) if we focused on the other countries. So in conclusion, this extra trivariate analysis helps us see more of the underlying detail of the patterns first uncovered by the bivariate analysis.
+
+
+
+
+```

@@ -1,0 +1,45 @@
+---
+title: "S670 Problem set 3"
+author: "Erik"
+date: "February 2, 2017"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, echo=FALSE}
+problemset3 <- read.table("/media/removable/USB Drive/S670/s670-ps3-data.txt", head=TRUE)
+
+library(ggplot2)
+
+
+```
+
+
+1.
+```{r}
+plot1 <- ggplot(problemset3, aes(x = x, y = (y1)^-1)) + geom_point() + geom_smooth(method.args=list(degree=1))
+plot1
+
+```
+> Loess curve with degree of 1 to make it follow a locally linear approach, straighter plot especially at the extremes.
+
+
+2.
+```{r}
+plot2 <- ggplot(problemset3, aes(x = x, y = log10(y2))) + geom_point() + geom_smooth(method.args=list(degree = 1, family = "symmetric"))
+plot2
+
+```
+> Loess with degree 1 again, linear curve, symmetric family to be more resistant to outliers, important because of the big one at x = 4.
+
+
+3.
+```{r}
+plot3 <- ggplot(problemset3, aes(x = x, y = y3)) + geom_point() + geom_smooth(span=.1)
+plot3
+
+```
+> Loess again with lower span, of .1. Includes more data in the "neighborhood", effectively makes it more erratic and less smooth.
