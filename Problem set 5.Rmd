@@ -6,25 +6,85 @@ output: pdf_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = FALSE)
 ```
 
-## R Markdown
+```{r}
+library(ggplot2)
+library(broom)
+library(MASS)
+library(tidyr)
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
 
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+movie_budgets <- read.table("./movie_budgets.txt", head = TRUE)
+movie_budgets$log.budget <- log10(movie_budgets$budget)
 
-```{r cars}
-summary(cars)
+
 ```
 
-## Including Plots
 
-You can also embed plots, for example:
+### Model
 
-```{r pressure, echo=FALSE}
-plot(pressure)
+```{r, echo=TRUE, tidy=TRUE}
+model <- loess(log.budget ~ year*length, data = movie_budgets, degree = 2, family = "symmetric", drop.square = "year", parametric = "length", span = .3)
+
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+# Model Justifications
+> So, to get the best fitting model I possibly could I fit an interaction between year and length as the residual plots without the interaction showed a lot of weird, uneven curving, suggesting that an interaction was necessary to explain more of the variation. I used a robust symmetric fit as there seemed to be a significant number of outliers, and a robust fit lead to better behaved residuals. Interestingly, to get the best fit possible, I fit a parametric model to the length term, and I dropped the square term from the year variable. In my interpretation, doing these seperately leads to both length and year being fit with curved functions still - just non standard curved functions. I think fitting a global, parametric function for the length variable improved the fit because there were some locally weird outlying datapoints in the length by budget distribution when it was plotted, so fitting globally rather than locally in that term reduces the impact of those points. Honestly though, I'm not too sure what exactly the drop.squares argument did for the year variable, but specifying it did improve the fit of the residual plots while also increasing the amount of variation explained by the model in the residual-fit plot. Sticking with the running theme here, a span of .3 was chosen as it lead to the best outcome for the two types residual plots examined - but the choice also makes good sense based on the large amount of observations in this dataset.
+
+
+# Question 2
+```{r, warning=FALSE, message=FALSE}
+
+###
+# fit model of budget ~ year*length, facet on length, play around with arguments
+year.lol <- loess(log.budget ~ year*length, data = movie_budgets, degree = 2, family = "symmetric", drop.square = "year", parametric = "length", span = .3)
+year.lol.df <- augment(year.lol)
+# Make new variable for length cut to facet on
+#length.cut <- cut_number(movie_budgets$length, n = 3)
+#year.cut <- cut_number(movie_budgets$year, n = 3)
+#year.lol.df <- data.frame(year.lol.df, length.cut, year.cut)
+# Plot residuals
+#ggplot(year.lol.df, aes(x = length, y = .resid)) + geom_point() + geom_smooth(method = "loess", span = 1, method.args = list(degree = 1, family = "symmetric")) + geom_abline(slope = 0, intercept = 0) +
+#  facet_grid(~year.cut)
+#ggplot(year.lol.df, aes(x = year, y = .resid)) + geom_point() + geom_smooth(method = "loess", span = 1, method.args = list(degree = 1, family = "symmetric")) + geom_abline(slope = 0, intercept = 0) +
+#  facet_grid(~length.cut)
+# THE ONE!!!!!
+# "Parametric" argument here used to specify that length should be fitted globally rather than locally. I think this helps because legth has a lot of weird outliers, so fitting it globally avoids 
+# giving them too large an influence? 
+# "drop.square" argument used for year to specify that that variable should be fit with a linear polynomial, not using a quadratic term.
+###
+
+#year.fit = year.lol.df$.fitted - mean(year.lol.df$.fitted)
+#year.resid = year.lol.df$.resid
+#year.lol.long = data.frame(year.fit, year.resid) %>% gather(component, log.budget)
+#ggplot(year.lol.long, aes(sample = log.budget)) + stat_qq(distribution = "qunif") + facet_grid(~component)
+# So, residuals and model are explaining just about the same amount of variation. Model is not perfect, but Brad says that it is pretty good for this dataset.
+
+
+# Plotting the interaction fit by using the predict command on a new grid of values.
+movies.grid <- expand.grid(year = seq(1910, 2000, length = 6), length = seq(10, 400, length = 20))
+movies.predict <- predict(year.lol, newdata = movies.grid)
+
+ggplot(data.frame(movies.grid, fit = as.vector(movies.predict)), aes(x = length, y = fit)) + geom_line() + facet_grid(~year)
+
+
+```
+
+> The above plot showing the predicted model fit of movie budget against movie length as faceted on year shows a pretty clear relationship of genearlly increasing movie budgets over time (across the year facets), and also a relationship of increasing budget with length, up until a certain point (between 150 and 180 minutes), after which budget decreases. 
+
+
+# Question 3
+```{r, warning=FALSE}
+
+movies.grid.contour <- expand.grid(year = seq(1910, 2000, 0.5), length = seq(10, 400, 1))
+movies.predict.contour <- predict(year.lol, newdata = movies.grid.contour)
+movies.plot.df <- data.frame(movies.grid.contour, fit = as.vector(movies.predict.contour))
+
+ggplot(movies.plot.df, aes(x = year, y = length, z = fit)) + geom_raster(aes(fill = fit)) + scale_fill_distiller(palette = "RdYlBu") + geom_contour()
+
+
+```
+
+> The above contour plot doesn't seem to be providing any new information that the faceted fit plots above didn't already give us, but it is (in my opinion) a much more clear and better way to visualize the data. In this plot it is pretty clear that regardless of the year, there has always been a high budget sweet spot for a length between roughly two and three hours - among the movies represented in this dataset at least. Perhaps the movies represented here that are much longer or shorter than that are either too short to have much need for a large budget, or experimental artsy films not intended for general audiences (I mean, a 5+ hour long movie?!) which were not able to secure the financing required for a large budget production.

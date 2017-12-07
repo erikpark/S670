@@ -1,0 +1,60 @@
+---
+title: "maps"
+author: "Erik Parker"
+date: "April 19, 2017"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(ggplot2)
+library(fiftystater)
+library(colorplaner)
+library(mapproj)
+library(viridis)
+
+data <- read.csv("data_Food.csv", head = TRUE)
+data <- data[-3144,]
+
+
+# State NATAMEN and obesity maps
+data$states <- state.name[match(data$State,state.abb)]
+
+data$states <- tolower(data$states)
+
+ggplot(data, aes(map_id=states)) +  geom_map(aes(fill = NATAMEN), map = fifty_states) + 
+  expand_limits(x = fifty_states$long, y = fifty_states$lat) +
+  coord_map() +
+  scale_x_continuous(breaks = NULL) + 
+  scale_y_continuous(breaks = NULL) +
+  labs(x = "", y = "") +
+  theme(legend.position = "bottom", 
+        panel.background = element_blank()) + aes(fill2 = PCT_OBESE_ADULTS10) + scale_fill_colorplane() +
+  theme(legend.position = "right")
+# map of NATAMEN and obesity
+
+
+ggplot(data, aes(map_id=states)) +  geom_map(aes(fill = NATAMEN), map = fifty_states) + 
+  expand_limits(x = fifty_states$long, y = fifty_states$lat) +
+  coord_map() +
+  scale_x_continuous(breaks = NULL) + 
+  scale_y_continuous(breaks = NULL) +
+  labs(x = "", y = "") +
+  theme(legend.position = "bottom", 
+        panel.background = element_blank())  +  scale_fill_viridis()
+
+
+ggplot(data, aes(map_id=states)) +  geom_map(aes(fill = PCT_OBESE_ADULTS10), map = fifty_states) + 
+  expand_limits(x = fifty_states$long, y = fifty_states$lat) +
+  coord_map() +
+  scale_x_continuous(breaks = NULL) + 
+  scale_y_continuous(breaks = NULL) +
+  labs(x = "", y = "") +
+  theme(legend.position = "bottom", 
+        panel.background = element_blank()) +  scale_fill_viridis()
+
+
+```

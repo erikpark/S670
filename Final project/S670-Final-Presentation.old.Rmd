@@ -1,0 +1,327 @@
+---
+title: "S670 Final Project"
+author:
+- The Fantastic Four
+- Erik "Human Torch" Parker
+- Emily "Invisible Woman" Rudman
+- Vinay "The Thing" Vernekar
+- Jervis "Mister Fantastic" Wang
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE,warning=FALSE}
+knitr::opts_chunk$set(echo = TRUE, tidy = TRUE, warning = FALSE)
+```
+# Description of Data
+
+__Data Sources__ - Two primary data sources are:   
+
+a) Catalog.data.gov - The data contains details like store/restaurant proximity, food prices, community characteristics etc.  
+
+b) Factfinder.census.gov - Income details (median income) state and county level
+
+
+__PCT_OBESE_ADULTS10__ - The percentage of obese adults in a county in 2010.
+
+__NATAMEN__ - The Natural Amenities scale, is an index developed by the USDA in 1999 which ranges from 1 to 7 and measures the desirability of a particular location (here a county) based on natural factors.
+
+__CONVSPTH07__ - Is a measure of the number of convenience stores in a county, per 1000 residents, in 2007.
+
+__FSRPTH07__ - Is the same measure but for full service restaurants in a county, per 1000 residents, in 2007.
+
+__PCT_DIABETES_ADULTS10__ - The percentage of adults that have diabetes in a county in 2010.
+
+__Above__ - A binary variable that assigns a 1 to a county who is above the national average obesity rate of 26.7% and 0 otherwise.
+
+__Poverty Rate__ - The poverty rate is the ratio of the number of people whose income falls below the poverty line.
+
+
+
+```{r,echo=FALSE,warning=FALSE,message=FALSE}
+library(tidyr)
+library(dplyr)
+library(ggplot2)
+library(GGally)
+library(gridExtra)
+library(fiftystater)
+library(colorplaner)
+library(mapproj)
+library(viridis)
+
+
+
+data <- read.csv("data_Food.csv", header=TRUE)
+data <- data[-3144,]
+# Read in data and remove last "sanity check" row
+
+data$above <- ifelse(data$PCT_OBESE_ADULTS10<=26.7,0,1)
+data$POVRATE<-as.numeric(as.character(data$POVRATE10))
+# Make new binomial variable for if a county has an obesity rate above the national average. 26.7 here used as it was the national average for obesity in 2010
+
+model.data <- na.omit(data)
+# Remove NAs from the dataset as they screw up the model
+
+model.data$regions <- state.region[match(model.data$State,state.abb)]
+
+
+# Assign regions to each county based on provided State code
+
+ggpairs(data, columns = c(as.character("NATAMEN"), "FSRPTH07", "PCT_DIABETES_ADULTS09", "above"), cardinality_threshold = NULL)
+# Plot showing correlations between the final predictor variables chosen.
+
+data$states <- state.name[match(data$State,state.abb)]
+# Change state abbreviations to full names for maps
+
+data$states <- tolower(data$states)
+# Change state names to all lower case to fit the format expected by mapping package
+
+########## Data for race and poverty ########
+health=read.table("Health.csv",header = TRUE,sep=",")
+
+socio=read.table("Socio.csv",header=TRUE,sep=",")
+
+inco=read.table("Income.csv",header=TRUE,sep=",")
+
+# Matching regions with states
+inco$regions=state.region[match(inco$State,state.abb)]
+inco$regions[which(is.na(inco$regions))]<-"Northeast"
+
+# Merging data sets and removing NA's
+Health.race=merge(x=health,y=socio,by=c("FIPS","State","County"),all.x=TRUE)
+Health.race.inco=merge(x=Health.race,y=inco,by=c("State"))
+maindata=na.omit(Health.race.inco)
+maindata$POVRATE10<-as.numeric(as.character(maindata$POVRATE10))
+
+#cor(maindata$PCT_OBESE_ADULTS10,maindata$POVRATE10)
+# Selecting required variables
+myvar<-c("regions","PCT_NHWHITE10","PCT_NHBLACK10","PCT_HISP10","PCT_NHASIAN10","PCT_NHNA10","PCT_NHPI10")
+race_data=maindata[myvar]
+
+### Change data race names to more intutive names 
+
+names(race_data)[2]<-"White"
+names(race_data)[3]<-"Black"
+names(race_data)[4]<-"Hispanic"
+names(race_data)[5]<-"Asian"
+names(race_data)[6]<-"Native"
+names(race_data)[7]<-"Hawaiian"
+
+#names(race_data)
+# Data engineering to get individual counts to support group by
+mynew<-gather(race_data,race,value,White:Hawaiian)
+
+pop_contribution= mynew%>%group_by(regions,race)%>%summarise(Pop_contribution=mean(value))
+
+
+# calculating average obese and diabities region wise
+avg_diab=maindata%>%group_by(regions)%>%summarise(Pop_dia=mean(PCT_DIABETES_ADULTS10),Pop_obse=mean(PCT_OBESE_ADULTS10),income=mean(Income))
+
+race_obese_diab=merge(x=pop_contribution,y=avg_diab,by="regions",all.x=TRUE)
+
+myvar1<-c("regions","POVRATE10")
+poverty_type=maindata[myvar1]
+poverty.wide<-gather(poverty_type,region,value,POVRATE10)
+poverty.wide$rate=as.numeric(poverty.wide$value)
+#summary(poverty.wide)
+poverty_avg<-poverty.wide%>%group_by(regions)%>%summarise(avg_poverty=mean(rate))
+
+national_poverty_avg=15.71 # for 2010
+########## Data for race and poverty END  ########
+
+```
+
+
+```{r, echo= FALSE}
+ggplot(race_obese_diab,aes(x=race,y=Pop_contribution,fill=race))+geom_bar(stat="identity")+facet_grid(~regions)+
+  geom_hline(aes(yintercept=Pop_dia),colour="#BB0000", linetype="dashed")+
+  geom_hline(aes(yintercept=Pop_obse),colour="#000099", linetype="twodash")+
+  geom_text(aes( 2, Pop_dia, label = "avg-diabetic",hjust=0,vjust=2), size = 3)+
+  geom_text(aes( 2, Pop_obse, label = "avg-obese"), vjust=2,size = 3)+theme(axis.line=element_blank(),axis.text.x=element_blank())+
+  ggtitle("Region wise race and health")+
+  theme(plot.title = element_text(hjust = 0.5))+theme(legend.position="bottom")
+```
+__Observations__  
+1) Regions have considerable difference in the race diversity  
+2) South and West regions have more diversity  
+3) West region has more obese rate and diabetes rate   
+
+
+```{r, echo= FALSE}
+avg_inc=inco%>%group_by(regions)%>%summarise(avg_income=mean(Income))
+I1=ggplot(avg_inc,aes(x=regions,y=avg_income,fill=regions))+geom_bar(stat="identity")+ggtitle("Region wise avg-median Income")+
+  theme(plot.title = element_text(hjust = 0.5))+theme(axis.line=element_blank(),axis.text.x=element_blank())
+I2=ggplot(maindata,aes(x=POVRATE10,y=PCT_OBESE_ADULTS10,colour=regions))+geom_point()+
+  ggtitle("Poverty and Obesity")+theme(plot.title = element_text(hjust = 0.5))+labs(x="Poverty Rate")
+
+grid.arrange(I1, I2, ncol = 2)
+
+```
+__Observations__  
+1) South has the lowest avg median income level  
+2) Earlier graphs indicate high obesity and diabetes rate in south  
+3) The scatter chart clearly indicates some relationship between Poverty and obesity  
+
+```{r, echo = FALSE}
+ggplot(data, aes(map_id=states)) +  geom_map(aes(fill = NATAMEN), map = fifty_states) + 
+  expand_limits(x = fifty_states$long, y = fifty_states$lat) +
+  coord_map() +
+  scale_x_continuous(breaks = NULL) + 
+  scale_y_continuous(breaks = NULL) +
+ labs(x = "", y = "", title = "A heat map of Obesity Rate vs Natural Amenities Scale") +
+  theme(legend.position = "bottom", 
+        panel.background = element_blank()) + aes(fill2 = PCT_OBESE_ADULTS10) + scale_fill_colorplane() +
+  theme(legend.position = "right")
+# map of NATAMEN and obesity
+```
+```{r, echo=FALSE}
+ggplot(data, aes(map_id=states)) +  geom_map(aes(fill = NATAMEN), map = fifty_states) + 
+  expand_limits(x = fifty_states$long, y = fifty_states$lat) +
+  coord_map() +
+  scale_x_continuous(breaks = NULL) + 
+  scale_y_continuous(breaks = NULL) +
+   labs(x = "", y = "", title = "A heat map of Natural Amenities Scale\naveraged by states") +
+  theme(legend.position = "bottom", 
+        panel.background = element_blank())  +  scale_fill_viridis()
+# Map of NATAMEN, averaged by state
+
+ggplot(data, aes(map_id=states)) +  geom_map(aes(fill = PCT_OBESE_ADULTS10), map = fifty_states) + 
+  expand_limits(x = fifty_states$long, y = fifty_states$lat) +
+  coord_map() +
+  scale_x_continuous(breaks = NULL) + 
+  scale_y_continuous(breaks = NULL) +
+  labs(x = "", y = "", title = "A heat map of Obesity Rate") +
+  theme(legend.position = "bottom", 
+        panel.background = element_blank()) +  scale_fill_viridis()
+# Map of obesity rate
+
+```
+
+```{r}
+model.ob <- glm(above ~  FSRPTH07 + NATAMEN+POVRATE , family = "binomial", data = model.data)
+
+summary(model.ob)
+```
+
+__Observations__  
+1) Binomial model predicting if counties are above average obesity from full service resturants/1000 people, NATAMEN, and poverty rate  
+2) Residual deviance: when poverty rate is included, reduces by ~200 pts compared to excluding poverty  
+3) AIC is also lower when we have poverty rate (better model)  
+
+```{r, echo = FALSE}
+model.ob.df <- model.data
+model.ob.df$.fitted <- fitted.values(model.ob)
+model.ob.df$.resid <- residuals(model.ob, type = "response")
+# Pulling out fitted and residual values for residual plot
+```
+
+
+```{r, echo = FALSE}
+ggplot(model.ob.df, aes(x = .fitted, y = .resid)) + geom_point() + geom_smooth(method = "loess", method.args = list(degree = 1))+labs(title = "A residual plot of the model")
+# Residual plot to check fit of model
+```
+__Observations__  
+```{r, echo = FALSE}
+ggplot(model.data, aes(x = NATAMEN, y = above)) + geom_point() + geom_jitter(width = 0.2, height = 0.05) + geom_smooth(method = "loess", method.args = list(degree=1))+ labs(title = "Plot of above vs Natural Amenities Scale")
+# Plot showing the number of counties above/below average by NATAMEN
+```
+
+__Observations__  
+
+
+
+```{r, echo=FALSE}
+above.pred <- predict(model.ob, type = "response", newdata = model.data)
+
+above.pred.df <- data.frame(model.ob.df, above.prob = as.vector(above.pred))
+# Setting up new dataframe values to get predictions for prediction plots.
+
+ggplot(above.pred.df, aes(x = NATAMEN, y = above.prob, color = regions)) + geom_point() + 
+  geom_jitter(width = 0.3, height = 0) + 
+  labs(colour = "Region", y = "Probability")+ labs(colour = "Region", y = "Probability", title = "Probability vs NATAMEN colored by region") 
+# Probability of being above the national average vs NATAMEN colored by region.  Shows that the west generally has higher NATAMEN and lower prob, NC lowest NATAMEN and high prob, and South high prob moderate NATAMEN.
+```
+__Observations__  
+1) West has highest NATAMEN and lowest probability  
+2) North Central lowest NATAMEN, really high probabilities  
+3) South moderate NATAMEN, relatively high probability  
+4) Northeast very similar to South, with lower NATAMEN overall  
+
+
+```{r, echo = FALSE}
+ggplot(above.pred.df, aes(x = regions, y = above.prob, color = as.factor(NATAMEN))) + geom_point() + 
+  geom_jitter(width = 0.3, height = 0) +
+  labs(colour = "NATAMEN", y = "Probability", x = "Region", title = "Probability vs region by colored by NATAMEN") 
+# Probability vs region, colored by NATAMEN.  Another way to look at previous plot.
+```
+
+__Observations__  
+1) Another view of previous plot, in general see lower NATAMEN values at high probabilities  
+2) West with largest consistent range of probabilities  
+
+```{r, echo = FALSE}
+ggplot(above.pred.df, aes(x = NATAMEN, y = above.prob, color = as.numeric(as.character(POVRATE10)))) + geom_point() +
+  facet_wrap("regions") + geom_jitter(width = 0.3, height = 0) + 
+  scale_color_viridis(option = "inferno") +labs(colour = "Poverty", y = "Probability", x = "NATAMEN", title = "A probability plot of obesity vs NATAMEN colored by poverty rate") 
+# Probability vs NATAMEN, colored by poverty rate, and faceted by region.  Shows that the south in general has really high poverty and probability of being above average for obesity.  West seems to be really mixed with poverty rate, but has relatively low probability, maybe because of the really high NATAMEN scores.  Northeast has really high obesity probability as well in general, but generally low poverty.
+```
+
+__Observations__   
+1) South with generally high poverty and probability, wide range of NATAMEN  
+2) West really mixed poverty rate, but generally low probabilities  
+3) Northeast low poverty, high probabilities  
+4) North Central like South, but lower poverty  
+5) In general, seems to be lower probability with lower poverty in general  
+
+```{r, echo = FALSE}
+ggplot(above.pred.df, aes(x = as.numeric(as.character(POVRATE10)), y = above.prob, color = as.factor(NATAMEN))) + 
+  geom_point() + facet_wrap("regions") + 
+  geom_jitter(width = 0.3, height = 0)+ labs(colour = "NATAMEN",x="Poverty Rate", y = "Probability", title = "A probability plot of obesity vs poverty rate colored by NATAMEN")  
+# Plot showing probability of above, vs poverty rate, colored by NATAMEN and faceted by region.  Interesting because the West is much different than other regions, and south and north central both show really dramatic relationships of increased probability with increased poverty rate.
+```
+
+__Observations__   
+1) See clearly increasing probability with increasing poverty in in all regions but west  
+2) Also see some horizontal "bands" of probability by NATAMEN  
+
+```{r, echo = FALSE}
+
+#c <- ggplot(above.pred.df, aes(x = CONVSPTH07, y = above.prob, color = regions)) + geom_point() + labs(y = "Probability", x = "Convience Stores / 1000", title = "A probability plot of being obese vs\nConvience Stores coloured by regions") 
+
+ggplot(above.pred.df, aes(x = FSRPTH07, y = above.prob, color = regions)) + geom_point()  + labs(y = "Probability", x = "Full Service Resturants / 1000", title = "A probability plot of obesity full service resturants coloured by region") 
+
+#grid.arrange(c,d,ncol = 2)
+```
+
+__Observations__  
+1) Possibly some interaction going on? More resturants in West which has lower obesity.  Not resturant number itself driving down rates, just a correlation?  
+
+```{r, echo= FALSE}
+ggplot(above.pred.df, aes(x = above, y = NATAMEN, color = regions)) + geom_point() + geom_jitter(width = 0.2, height = .2)+facet_wrap(~State) + labs(title = "A plot of Natural Amenities Scale vs above colored by\nregions and faceted by states")
+  
+  
+```
+
+
+
+
+#Limitations
+-We weren't sure which type of diabetes this measures.  
+-Didn't report how they got the data.  
+-This is an observational study so they had no control over the variables. We just looked for explanatory patterrs.  
+-We had to take a a lot of NA and had to take out a bunch of data points ( only 35 states left).  
+-The income reported is the median income for each county and has an error margin of +- 5%.  
+-We would have liked more categories for the information they had.   
+
+
+#Conclusion
+
+-We determined FSRPTH07, NATAMEN, and Poverty Rate were the three best variables to predict whether your county would be above and below obesity rate.   
+-We made a good predictive model.  
+-Don't live in Kentucky.  
+
+
+
+
+

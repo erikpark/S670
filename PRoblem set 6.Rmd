@@ -1,0 +1,100 @@
+---
+title: "S670 Problem set 6"
+author: "Erik Parker"
+date: "March 20, 2017"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, echo=FALSE}
+library(ggplot2)
+library(tidyr)
+library(MASS)
+library(broom)
+
+barley <- read.table("minnesota.barley.yield.txt", head = TRUE)
+
+barley.factor <- barley
+barley.factor$year <- as.factor(barley.factor$year)
+barley.factor <- barley.factor[!barley.factor$year == "1934",]
+barley.factor <- barley.factor[!barley.factor$year == "1928",]
+barley.factor <- barley.factor[!barley.factor$year == "1933",]
+barley.factor$year <- factor(barley.factor$year)
+
+```
+
+
+### 1. Draw an appropriate faceted graph showing how barley yield varied by year at each location, using color as necessary. When looking at successive years, was it more common for the yields to move in the same direction at all locations, or was it more common for the yields to increase at some locations and decrease at others?
+
+```{r, echo=FALSE}
+
+ggplot(barley, aes(x = year, y = yield)) + geom_col() + facet_wrap(~site)
+# bar plot with yield by year for each site.
+
+```
+
+
+> The above plot shows that in general, the year to year yields of the sites seem to not move in the same direction at all the locations.  Also in general, it seems that when there is disagreement in the directionality of yield changes between the sites (some sites increase year to year, while others decrease), Crookstown, Duluth, and Grand Rapids consistently move together in one direction, while St. Paul, Waseca, and to a lesser extent Morris move together in the other.  The most clear example of this pattern can be seen from 1934 until 1936 where yields at the first three sites named decrease, while the others increase then decrease again. Also of note here is the disagreement between the yield change from 1931-32 between Morris and the other sites.  It is clear here that the yields at Morris, very, slightly increase over that time span while the other sites all show some degree of reduction.  The magnitude of increase at the Morris site is low enough though, and there are other sites with similiarly low decreases, that from just viewing the data alone it seems reasonable to attribute this contentious pattern to random variation in the data. In general it seems that the sites have their own shifting patterns that sometimes can be generalized across multiple sites, but more often are unique to that location.
+
+
+### 2. Fit a model with yield as the response and gen (variety), year, and site as explanatory variables, with the goal of determining whether Morris 1931-1932 is an anomaly. Justify why you chose this model and not some other one. Because of outliers, you should use a robust fitting method.
+
+```{r}
+
+model.rlm <- rlm(yield ~ site * year + gen, data = barley.factor, psi = psi.bisquare)
+
+```
+
+```{r, echo=FALSE}
+model.rlm.df <- augment(model.rlm)
+model.rlm.df$.fitted = model.rlm.df$.fitted - mean(model.rlm.df$.fitted)
+model.rlm.long = model.rlm.df %>% gather(component, value, c(.fitted, .resid))
+ggplot(model.rlm.long, aes(sample = value)) + stat_qq(distribution = "qunif") + 
+  facet_grid(~component)
+
+```
+
+> This model was fit as it generated to the best residual-fit plot out of all the alternative models attempted. I chose to drop the years 1928, 33, and 34 from the data used to construct my model as they had missing values which prevented me from performing an interaction between site and year with them included, an interaction that proved to be necessary when the residauls were examined.  Dropping these years removed a lot of the largest outliers from the data, and allowed for the best performing model to be constructed while still retaining the majority of the data, so I believe it was an appropriate step to take.
+
+
+### 3. Draw plots of the fit and/or residuals with the goal of determining whether Morris 1931-1932 is a mistake, or whether it can be explained as natural variation. As best as you can tell, was there a mistake?
+
+```{r, echo = FALSE}
+
+model.effects <- dummy.coef(model.rlm)
+year.site.inter <- model.effects$`site:year`
+year.site.main <- outer(model.effects$year, model.effects$site, "+")
+year.site.effect <- year.site.inter + as.vector(year.site.main)
+years <- rep(row.names(year.site.main), 6)
+sites <- rep(colnames(year.site.main), each = 7)
+sites <- factor(sites, levels = names(model.effects$site))
+year.site.df <- data.frame(year = years, site = sites, effect = as.vector(year.site.effect))
+ggplot(year.site.df, aes(x = effect, y = site, col = year)) + geom_point(size = 3)
+
+
+gen.effects <- sort(model.effects$gen)
+varieties <- factor(names(model.effects$gen), levels = names(model.effects$gen))
+variety.df <- data.frame(effect = gen.effects, variety = varieties)
+ggplot(variety.df, aes(x = effect, y = variety)) + geom_point()
+
+
+ggplot(model.rlm.df, aes(x = .resid, y = site, col = gen)) + geom_point() + facet_wrap(~year) + theme(axis.text.y = element_text(size = 9))
+# There doesnt seem to be any real pattern left to the residuals here, variation, but no pattern.
+
+ggplot(model.rlm.df, aes(x = .resid, y = gen, col = year)) + geom_point() + facet_wrap(~site) + theme(axis.text.y = element_text(size = 5))
+
+
+#ggplot(model.rlm.df, aes(x = .resid, y = gen)) + geom_point() + facet_wrap(~site + 
+#year) + theme(axis.text.y = element_text(size = 2))
+# Hard to look at, but no real pattern to the data here.  Seems like 1931-32 was just natural variation in the data.
+
+#ggplot(model.rlm.df, aes(x = .resid, y = site)) + geom_point() + facet_wrap(~gen + year)
+# Impossible to see without zooming in, but breaks down the residuals well, shows no real pattern to them.
+
+```
+
+> Based on these new plots of the fit of my model, and the residuals plots of said model (two not shown here due to size issues, but included in the code), it seems as though there is a large amount of natural variation in the barley yields between these sites, for the different years, and for the different varieties.  This leads me to believe that the data from Morris between 1931 and 1932 was not a reversal mistake, and was instead just a result of the extensive barley yield variation seen across years within, and between sites in these data.  So, as best as I can tell, the reversal in the Morris data was not a mistake, and was instead just a natural result of the large amount of variationpresent in these data.
+
